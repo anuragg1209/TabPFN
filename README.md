@@ -15,7 +15,7 @@ CUDA optimization.
 
 ⚠️ **Major Update: Version 2.0:** Complete codebase overhaul with new architecture and 
 features. Previous version available at [v1.0.0](../../tree/v1.0.0) and 
-`pip install tabpfn<2`.
+`pip install tabpfn==0.1.11`.
 
 📚 For detailed usage examples and best practices, check out [Interactive Colab Tutorial](https://tinyurl.com/tabpfn-colab-local)
 
@@ -41,51 +41,6 @@ pip install tabpfn
 # Local development installation
 git clone https://github.com/PriorLabs/TabPFN.git
 pip install -e "TabPFN[dev]"
-```
-
-### Offline Usage
-
-TabPFN automatically downloads model weights when first used. For offline usage:
-
-#### Manual Download
-
-1. Download the model files manually from HuggingFace:
-   - Classifier: [tabpfn-v2-classifier.ckpt](https://huggingface.co/Prior-Labs/TabPFN-v2-clf/resolve/main/tabpfn-v2-classifier.ckpt)
-   - Regressor: [tabpfn-v2-regressor.ckpt](https://huggingface.co/Prior-Labs/TabPFN-v2-reg/resolve/main/tabpfn-v2-regressor.ckpt)
-
-2. Place the file in one of these locations:
-   - Specify directly: `TabPFNClassifier(model_path="/path/to/model.ckpt")`
-   - Set environment variable: `os.environ["TABPFN_MODEL_CACHE_DIR"] = "/path/to/dir"`
-   - Default OS cache directory:
-     - Windows: `%APPDATA%\tabpfn\`
-     - macOS: `~/Library/Caches/tabpfn/`
-     - Linux: `~/.cache/tabpfn/`
-
-#### Quick Download Script
-
-```python
-import requests
-from tabpfn.utils import _user_cache_dir
-import sys
-
-# Get default cache directory using TabPFN's internal function
-cache_dir = _user_cache_dir(platform=sys.platform)
-cache_dir.mkdir(parents=True, exist_ok=True)
-
-# Define models to download
-models = {
-    "tabpfn-v2-classifier.ckpt": "https://huggingface.co/Prior-Labs/TabPFN-v2-clf/resolve/main/tabpfn-v2-classifier.ckpt",
-    "tabpfn-v2-regressor.ckpt": "https://huggingface.co/Prior-Labs/TabPFN-v2-reg/resolve/main/tabpfn-v2-regressor.ckpt",
-}
-
-# Download each model
-for name, url in models.items():
-    path = cache_dir / name
-    print(f"Downloading {name} to {path}")
-    with open(path, "wb") as f:
-        f.write(requests.get(url).content)
-
-print(f"Models downloaded to {cache_dir}")
 ```
 
 ### Basic Usage
@@ -220,13 +175,78 @@ You can read our paper explaining TabPFN [here](https://doi.org/10.1038/s41586-0
 
 ## ❓ FAQ
 
-### Python Version Compatibility
+### **Usage & Compatibility**
+
+**Q: What dataset sizes work best with TabPFN?**  
+A: TabPFN is optimized for **datasets up to 10,000 rows**. For larger datasets, consider using **Random Forest preprocessing** or other extensions. See our [Colab notebook](https://colab.research.google.com/drive/154SoIzNW1LHBWyrxNwmBqtFAr1uZRZ6a#scrollTo=OwaXfEIWlhC8) for strategies.
 
 **Q: Why can't I use TabPFN with Python 3.8?**  
-A: TabPFN v2 requires Python 3.9 or newer as specified in our `pyproject.toml`. This is due to our use of newer Python features and type annotations. We recommend updating to Python 3.9+ to use TabPFN v2.
+A: TabPFN v2 requires **Python 3.9+** due to newer language features. Compatible versions: **3.9, 3.10, 3.11, 3.12**.
 
-**Q: I'm getting pickle errors when loading the model. What could be wrong?**  
-A: First check that you're using Python 3.9+ and PyTorch 2.1+. If you've manually downloaded the model files, ensure they weren't corrupted during download. Try using the download script in the [Offline Usage](#offline-usage) section above.
+### **Installation & Setup**
+
+**Q: How do I use TabPFN without an internet connection?**  
+
+TabPFN automatically downloads model weights when first used. For offline usage:
+
+**Manual Download**
+
+1. Download the model files manually from HuggingFace:
+   - Classifier: [tabpfn-v2-classifier.ckpt](https://huggingface.co/Prior-Labs/TabPFN-v2-clf/resolve/main/tabpfn-v2-classifier.ckpt)
+   - Regressor: [tabpfn-v2-regressor.ckpt](https://huggingface.co/Prior-Labs/TabPFN-v2-reg/resolve/main/tabpfn-v2-regressor.ckpt)
+
+2. Place the file in one of these locations:
+   - Specify directly: `TabPFNClassifier(model_path="/path/to/model.ckpt")`
+   - Set environment variable: `os.environ["TABPFN_MODEL_CACHE_DIR"] = "/path/to/dir"`
+   - Default OS cache directory:
+     - Windows: `%APPDATA%\tabpfn\`
+     - macOS: `~/Library/Caches/tabpfn/`
+     - Linux: `~/.cache/tabpfn/`
+
+**Quick Download Script**
+
+```python
+import requests
+from tabpfn.utils import _user_cache_dir
+import sys
+
+# Get default cache directory using TabPFN's internal function
+cache_dir = _user_cache_dir(platform=sys.platform)
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+# Define models to download
+models = {
+    "tabpfn-v2-classifier.ckpt": "https://huggingface.co/Prior-Labs/TabPFN-v2-clf/resolve/main/tabpfn-v2-classifier.ckpt",
+    "tabpfn-v2-regressor.ckpt": "https://huggingface.co/Prior-Labs/TabPFN-v2-reg/resolve/main/tabpfn-v2-regressor.ckpt",
+}
+
+# Download each model
+for name, url in models.items():
+    path = cache_dir / name
+    print(f"Downloading {name} to {path}")
+    with open(path, "wb") as f:
+        f.write(requests.get(url).content)
+
+print(f"Models downloaded to {cache_dir}")
+```
+
+**Q: I'm getting a `pickle` error when loading the model. What should I do?**  
+A: Try the following:
+- Download the newest version of tabpfn `pip install tabpfn --upgrade`
+- Ensure model files downloaded correctly (re-download if needed)
+
+### **Performance & Limitations**
+
+**Q: Can TabPFN handle missing values?**  
+A: **Yes!**
+
+**Q: How can I improve TabPFN’s performance?**  
+A: Best practices:
+- Use **AutoTabPFNClassifier** from [TabPFN Extensions](https://github.com/priorlabs/tabpfn-extensions) for post-hoc ensembling
+- Feature engineering: Add domain-specific features to improve model performance
+Not effective:
+- Adapt feature scaling
+- Convert categorical features to numerical values (e.g., one-hot encoding)
 
 ## 🛠️ Development
 
