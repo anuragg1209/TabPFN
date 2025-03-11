@@ -54,6 +54,7 @@ from tabpfn.utils import (
     update_encoder_outlier_params,
     validate_X_predict,
     validate_Xy_fit,
+    CustomPipelineFeatureGenerator
 )
 
 if TYPE_CHECKING:
@@ -451,29 +452,43 @@ class TabPFNClassifier(ClassifierMixin, BaseEstimator):
         X = _fix_dtypes(X, cat_indices=self.categorical_features_indices)
 
         # Use skrub's TableVectorizer to handle text columns with NAs properly
-        from sklearn.preprocessing import OrdinalEncoder
-        from skrub import TableVectorizer
+        # from sklearn.preprocessing import OrdinalEncoder
+        # from skrub import TableVectorizer
 
-        # Configure TableVectorizer to handle missing values consistently
-        # By using OrdinalEncoder with unknown_value=float("nan") for all text columns
-        table_vectorizer = TableVectorizer(
-            low_cardinality=OrdinalEncoder(
-                handle_unknown="use_encoded_value",
-                unknown_value=float("nan"),
-            ),
-            high_cardinality=OrdinalEncoder(
-                handle_unknown="use_encoded_value",
-                unknown_value=float("nan"),
-            ),
-            numeric="passthrough",
-        )
+        # # Configure TableVectorizer to handle missing values consistently
+        # # By using OrdinalEncoder with unknown_value=float("nan") for all text columns
+        # table_vectorizer = TableVectorizer(
+        #     low_cardinality=OrdinalEncoder(
+        #         handle_unknown="use_encoded_value",
+        #         unknown_value=float("nan"),
+        #     ),
+        #     high_cardinality=OrdinalEncoder(
+        #         handle_unknown="use_encoded_value",
+        #         unknown_value=float("nan"),
+        #     ),
+        #     numeric="passthrough",
+        # )
 
-        X = table_vectorizer.fit_transform(X)
-        self.preprocessor_ = table_vectorizer
+        # X = table_vectorizer.fit_transform(X)
+        # self.preprocessor_ = table_vectorizer
+
+        X = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X
+        X = X.fillna("__MISSING__")
+
+        feature_generator = CustomPipelineFeatureGenerator()
+
+        try:
+            X = feature_generator.fit_transform(X)
+        except TypeError as e:
+            if "unhashable type" in str(e):
+                raise TypeError("argument must be a string or a number") from e
+            raise
 
         # TableVectorizer returns a DataFrame, convert to numpy array
         if hasattr(X, "values"):
             X = X.to_numpy()
+        
+        self.preprocessor_ = feature_generator
 
         self.inferred_categorical_indices_ = infer_categorical_features(
             X=X,

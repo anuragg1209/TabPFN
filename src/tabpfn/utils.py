@@ -28,6 +28,12 @@ from tabpfn.constants import (
     REGRESSION_NAN_BORDER_LIMIT_LOWER,
     REGRESSION_NAN_BORDER_LIMIT_UPPER,
 )
+
+from autogluon.features.generators import (
+    AutoMLPipelineFeatureGenerator,
+    CategoryFeatureGenerator,
+)
+
 from tabpfn.misc._sklearn_compat import check_array, validate_data
 from tabpfn.model.bar_distribution import FullSupportBarDistribution
 from tabpfn.model.loading import download_model, load_model
@@ -879,3 +885,9 @@ def get_total_memory_windows() -> float:
     k32_lib.GlobalMemoryStatusEx(ctypes.byref(mem_status))
 
     return mem_status.ullTotalPhys / 1e9  # Convert bytes to GB
+
+class CustomPipelineFeatureGenerator(AutoMLPipelineFeatureGenerator):
+            """Custom feature generator that preserves all categories."""
+
+            def _get_category_feature_generator(self):
+                return CategoryFeatureGenerator(minimum_cat_count=None)
