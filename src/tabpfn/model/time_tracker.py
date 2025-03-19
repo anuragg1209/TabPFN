@@ -48,6 +48,15 @@ class TimeUsageTracker:
                 stacklevel=2,
             )
 
+    def _start_timer(self, label: str, start_time: float) -> None:
+        # Schedule a timer to check the segment after the limit
+        timer = threading.Timer(
+            TIME_WARNING_CPU, self._warn_if_over_limit, args=(label, start_time)
+        )
+        timer.daemon = True  # Ensure timer doesn't block program exit
+        timer.start()
+        self._timers[label] = timer
+
     def start(self, label: str) -> None:
         """Start a new segment with the given label.
 
@@ -58,14 +67,7 @@ class TimeUsageTracker:
             raise RuntimeError(f"Segment '{label}' is already active.")
         start_time = time.time()
         self.active_segments[label] = start_time
-
-        # Schedule a timer to check the segment after the limit
-        timer = threading.Timer(
-            TIME_WARNING_CPU, self._warn_if_over_limit, args=(label, start_time)
-        )
-        timer.daemon = True  # Ensure timer doesn't block program exit
-        timer.start()
-        self._timers[label] = timer
+        self._start_timer(label, start_time)
 
     def stop(self, label: str) -> None:
         """Stop the segment with the given label.
@@ -97,12 +99,7 @@ class TimeUsageTracker:
             # Restart the timer with the new start time
             start_time = time.time()
             self.active_segments[label] = start_time
-            timer = threading.Timer(
-                TIME_WARNING_CPU, self._warn_if_over_limit, args=(label, start_time)
-            )
-            timer.daemon = True
-            timer.start()
-            self._timers[label] = timer
+            self._start_timer(label, start_time)
 
     def total_time(self, labels: list[str] | None = None) -> float:
         """Return the total elapsed time for segments with the given labels.
