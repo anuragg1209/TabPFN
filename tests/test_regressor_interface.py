@@ -476,3 +476,18 @@ def test_constant_target(X_y: tuple[np.ndarray, np.ndarray]) -> None:
         assert np.all(
             quantile_prediction == 5.0
         ), "Quantile predictions are not constant as expected"
+
+    full_output = model.predict(X, output_type="full")
+    assert np.all(
+        full_output["mean"] == 5.0
+    ), "Mean predictions are not constant as expected for full output"
+    assert np.all(
+        full_output["median"] == 5.0
+    ), "Median predictions are not constant as expected for full output"
+    assert np.all(
+        full_output["mode"] == 5.0
+    ), "Mode predictions are not constant as expected for full output"
+    for quantile_prediction in full_output["quantiles"]:
+        assert np.all(
+            quantile_prediction == 5.0
+        ), "Quantile predictions are not constant as expected for full output"
