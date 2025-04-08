@@ -461,6 +461,11 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         if np.unique(y).size == 1:
             self.is_constant_target = True
             self.constant_value_ = y[0]
+            # Create minimally valid borders around constant value
+            dummy_borders = torch.tensor(
+                [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
+            )
+            self.renormalized_criterion_ = FullSupportBarDistribution(dummy_borders)
             return self
 
         if feature_names_in is not None:
@@ -655,14 +660,9 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
                     quantiles=[constant_prediction for _ in quantiles],
                 )
                 if output_type == "full":
-                    # Create minimally valid borders around constant value
-                    dummy_borders = torch.tensor(
-                        [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
-                    )
-                    constant_criterion = FullSupportBarDistribution(dummy_borders)
                     result = FullOutputDict(
                         **main_outputs,
-                        criterion=constant_criterion,
+                        criterion=self.renormalized_criterion_,
                         logits=torch.zeros((X.shape[0], 1)),
                     )
                 else:
