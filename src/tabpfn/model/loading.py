@@ -369,7 +369,7 @@ def load_model_criterion_config(
     model_seed: int,
 ) -> tuple[PerFeatureTransformer, FullSupportBarDistribution, InferenceConfig]: ...
 
-  
+
 def load_model_criterion_config(
     model_path: None | str | Path,
     *,
