@@ -461,6 +461,11 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             self.device, X, allow_cpu_override=self.ignore_pretraining_limits
         )
 
+        if hasattr(self, "is_constant_target"):
+            del self.is_constant_target  # type: ignore
+        if hasattr(self, "constant_value_"):
+            del self.constant_value_  # type: ignore
+
         if np.unique(y).size == 1:
             self.is_constant_target = True
             self.constant_value_ = y[0]
