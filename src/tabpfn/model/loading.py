@@ -287,7 +287,7 @@ def download_all_models(to: Path) -> None:
             download_model(
                 to=to / ckpt_name,
                 version="v2",
-                which=cast(Literal["classifier", "regressor"], model_type),
+                which=cast("Literal['classifier', 'regressor']", model_type),
                 model_name=ckpt_name,
             )
 
@@ -340,7 +340,7 @@ def _user_cache_dir(platform: str, appname: str = "tabpfn") -> Path:
     return use_instead_path
 
 
-@overload  # type: ignore[no-overload-impl]
+@overload
 def load_model_criterion_config(
     model_path: str | Path | None,
     *,
@@ -404,7 +404,7 @@ def load_model_criterion_config(
     """
     (model_path, model_dir, model_name, which) = resolve_model_path(
         model_path, which, version
-    )  # type: ignore
+    )
 
     model_dir.mkdir(parents=True, exist_ok=True)
     if not model_path.exists():
@@ -427,7 +427,7 @@ def load_model_criterion_config(
         res = download_model(
             model_path,
             version=version,
-            which=cast(Literal["classifier", "regressor"], which),
+            which=cast("Literal['classifier', 'regressor']", which),
             model_name=model_name,
         )
         if res != "ok":
@@ -648,7 +648,7 @@ def load_model(
     # `True`, dissallowing loading of arbitrary objects.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
-        checkpoint = torch.load(path, map_location="cpu", weights_only=None)  # type: ignore
+        checkpoint = torch.load(path, map_location="cpu", weights_only=None)
 
     assert "state_dict" in checkpoint
     assert "config" in checkpoint
