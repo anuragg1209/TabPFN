@@ -474,19 +474,17 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             self.device, X, allow_cpu_override=self.ignore_pretraining_limits
         )
 
-        if hasattr(self, "is_constant_target"):
-            del self.is_constant_target  # type: ignore
-        if hasattr(self, "constant_value_"):
-            del self.constant_value_  # type: ignore
+        self.is_constant_target_ = np.unique(y).size == 1
+        self.constant_value_ = None
 
-        if np.unique(y).size == 1:
-            self.is_constant_target = True
+        if self.is_constant_target_:
             self.constant_value_ = y[0]
             # Create minimally valid borders around constant value
-            dummy_borders = torch.tensor(
-                [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
+            self.renormalized_criterion_ = FullSupportBarDistribution(
+                borders=torch.tensor(
+                    [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
+                )
             )
-            self.renormalized_criterion_ = FullSupportBarDistribution(dummy_borders)
             return self
 
         if feature_names_in is not None:
@@ -651,8 +649,6 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         check_is_fitted(self)
 
         X = validate_X_predict(X, self)
-        X = _fix_dtypes(X, cat_indices=self.categorical_features_indices)
-        X = _process_text_na_dataframe(X, ord_encoder=self.preprocessor_)  # type: ignore
 
         if quantiles is None:
             quantiles = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
@@ -663,8 +659,11 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         if output_type not in self._USABLE_OUTPUT_TYPES:
             raise ValueError(f"Invalid output type: {output_type}")
 
-        if hasattr(self, "is_constant_target") and self.is_constant_target:
+        if hasattr(self, "is_constant_target_") and self.is_constant_target_:
             return self._handle_constant_target(X.shape[0], output_type, quantiles)
+
+        X = _fix_dtypes(X, cat_indices=self.categorical_features_indices)
+        X = _process_text_na_dataframe(X, ord_encoder=self.preprocessor_)  # type: ignore
 
         std_borders = self.bardist_.borders.cpu().numpy()
         outputs: list[torch.Tensor] = []
