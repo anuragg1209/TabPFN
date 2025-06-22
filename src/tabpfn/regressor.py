@@ -560,19 +560,6 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
 
         assert len(ensemble_configs) == self.n_estimators
 
-        self.is_constant_target_ = np.unique(y).size == 1
-        self.constant_value_ = None
-
-        if self.is_constant_target_:
-            self.constant_value_ = y[0]
-            # Create minimally valid borders around constant value
-            self.renormalized_criterion_ = FullSupportBarDistribution(
-                borders=torch.tensor(
-                    [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
-                )
-            )
-            return self
-
         return ensemble_configs, X, y, self.bardist_
 
     def fit_from_preprocessed(
@@ -667,6 +654,20 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             )
 
         assert len(ensemble_configs) == self.n_estimators
+
+        self.is_constant_target_ = np.unique(y).size == 1
+        self.constant_value_ = None
+
+        if self.is_constant_target_:
+            self.constant_value_ = y[0]
+            # Create minimally valid borders around constant value
+            self.bardist_ = FullSupportBarDistribution(
+                borders=torch.tensor(
+                    [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
+                )
+            )
+
+            return self
 
         # Standardize y
         mean = np.mean(y)
@@ -1008,7 +1009,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             if output_type == "full":
                 result = FullOutputDict(
                     **main_outputs,
-                    criterion=self.renormalized_criterion_,
+                    criterion=self.bardist_,
                     logits=torch.zeros((n_samples, 1)),
                 )
             else:
