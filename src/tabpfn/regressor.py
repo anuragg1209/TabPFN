@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import typing
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Union
@@ -433,7 +433,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         self,
         X_raw: XType | list[XType],
         y_raw: YType | list[YType],
-        split_fn,
+        split_fn: Callable,
         max_data_size: None | int = 10000,
     ) -> DatasetCollectionWithPreprocessing:
         """Transforms raw input data into a collection of datasets,
@@ -868,7 +868,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         X: list[torch.Tensor] | XType,
         *,
         use_inference_mode: bool = False,
-    ) -> torch.Tensor:  # FIXME: Refactor to reduce complexity,
+    ) -> tuple[torch.Tensor | None, list[torch.Tensor], list[np.ndarray]]:
         """Forward pass for TabPFNRegressor Infernce Engine.
         Used in fine-tuning and prediction. Called directly
         in FineTuning training loop or by predict() function
@@ -883,7 +883,10 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             directly by user, so default should be False here.
 
         Returns:
-            Averaged logits (for fine-tuning), outputs, borders.
+            A tuple containing:
+                - Averaged logits over the ensemble (for fine-tuning).
+                - Raw outputs from each estimator in the ensemble.
+                - Borders used for each estimator.
         """
         # Scenario 1: Standard inference path
         is_standard_inference = use_inference_mode and not isinstance(
