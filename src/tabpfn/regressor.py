@@ -83,10 +83,6 @@ if TYPE_CHECKING:
 
 
 # --- Prediction Output Types and Constants ---
-# The following constants and type aliases are defined explicitly and grouped
-# here for maximum clarity. While this involves repeating the mode strings in
-# the tuples and the Literal type, this direct approach is the most
-# understandable for other developers, as it avoids less common `typing` features.
 
 # 1. Tuples for runtime validation and internal logic.
 # These are defined directly as tuples of strings for immediate clarity.
