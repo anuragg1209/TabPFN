@@ -42,8 +42,6 @@ from tabpfn.base import (
     determine_precision,
     get_preprocessed_datasets_helper,
 )
-
-# NEW: Import the specialized inference engine
 from tabpfn.inference import InferenceEngineBatchedNoPreprocessing
 from tabpfn.model.bar_distribution import FullSupportBarDistribution
 from tabpfn.preprocessing import (
@@ -84,9 +82,28 @@ if TYPE_CHECKING:
         Tags = Any
 
 
-# TypedDict definitions for prediction outputs
+# --- Prediction Output Types and Constants ---
+# The following constants and type aliases are defined explicitly and grouped
+# here for maximum clarity. While this involves repeating the mode strings in
+# the tuples and the Literal type, this direct approach is the most
+# understandable for other developers, as it avoids less common `typing` features.
+
+# 1. Tuples for runtime validation and internal logic.
+# These are defined directly as tuples of strings for immediate clarity.
+_OUTPUT_TYPES_BASIC = ("mean", "median", "mode")
+_OUTPUT_TYPES_QUANTILES = ("quantiles",)
+_OUTPUT_TYPES = _OUTPUT_TYPES_BASIC + _OUTPUT_TYPES_QUANTILES
+_OUTPUT_TYPES_COMPOSITE = ("full", "main")
+_USABLE_OUTPUT_TYPES = _OUTPUT_TYPES + _OUTPUT_TYPES_COMPOSITE
+
+
+# 2. Type aliases for static type checking and IDE support.
+OutputType = Literal["mean", "median", "mode", "quantiles", "full", "main"]
+"""The type hint for the `output_type` parameter in `predict`."""
+
+
 class MainOutputDict(TypedDict):
-    """Dictionary containing the main output types from the TabPFN regressor."""
+    """Specifies the return structure for `output_type="main"`."""
 
     mean: np.ndarray
     median: np.ndarray
@@ -95,7 +112,7 @@ class MainOutputDict(TypedDict):
 
 
 class FullOutputDict(MainOutputDict):
-    """Dictionary containing all outputs from the TabPFN regressor."""
+    """Specifies the return structure for `output_type="full"`."""
 
     criterion: FullSupportBarDistribution
     logits: torch.Tensor
@@ -104,14 +121,7 @@ class FullOutputDict(MainOutputDict):
 RegressionResultType = Union[
     np.ndarray, list[np.ndarray], MainOutputDict, FullOutputDict
 ]
-OutputModeType = Literal[
-    "mean",
-    "median",
-    "mode",
-    "quantiles",
-    "full",
-    "main",
-]
+"""The type hint for the return value of the `predict` method."""
 
 
 class TabPFNRegressor(RegressorMixin, BaseEstimator):
@@ -163,19 +173,6 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
     preprocessor_: ColumnTransformer
     """The column transformer used to preprocess the input data to be numeric."""
 
-    # TODO: consider moving the following to constants.py and merging with the
-    #   Output types defined above
-    _OUTPUT_MODES_BASIC = ("mean", "median", "mode")
-    """The basic output types supported by the model."""
-    _OUTPUT_MODES_QUANTILES = ("quantiles",)
-    """The quantiles output type supported by the model."""
-    _OUTPUT_MODES = _OUTPUT_MODES_BASIC + _OUTPUT_MODES_QUANTILES
-    """The output types supported by the model for the "main" output type."""
-    _OUTPUT_MODES_COMPOSITE = ("full", "main")
-    """The composite output types supported by the model."""
-    _USABLE_OUTPUT_MODES = _OUTPUT_MODES + _OUTPUT_MODES_COMPOSITE
-    """The output types supported by the model."""
-
     def __init__(  # noqa: PLR0913
         self,
         *,
@@ -197,8 +194,6 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         random_state: int | np.random.RandomState | np.random.Generator | None = 0,
         n_jobs: int = -1,
         inference_config: dict | ModelInterfaceConfig | None = None,
-        # NEW: Add differentiable_input for consistency, though less used in
-        # regression FT
         differentiable_input: bool = False,
     ) -> None:
         """A TabPFN interface for regression.
@@ -464,13 +459,11 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         )
 
     def _initialize_model_variables(self) -> tuple[int, np.random.Generator]:
-        """Perform initialization of the model, return determined byte_size
-        and RNG object.
-        """
+        """Initializes the model, returning byte_size and RNG object."""
         return _initialize_model_variables_helper(self, "regressor")
 
     def _initialize_dataset_preprocessing(
-        self, X: XType, y: YType, rng
+        self, X: XType, y: YType, rng: np.random.Generator
     ) -> tuple[list[RegressorEnsembleConfig], XType, YType, FullSupportBarDistribution]:
         """Prepare ensemble configs and validate X, y for one dataset/chunk.
         Handle the preprocessing of the input (X and y). We also return the
@@ -570,7 +563,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         cat_ix: list[list[int]],
         configs: list[list[EnsembleConfig]],  # Should be RegressorEnsembleConfig
         *,
-        no_refit=True,
+        no_refit: bool = True,
     ) -> TabPFNRegressor:
         """Used in Fine-Tuning. Fit the model to preprocessed inputs from torch
         dataloader inside a training loop a Dataset provided by
@@ -592,13 +585,12 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         if not hasattr(self, "model_") or not no_refit:
             byte_size, rng = self._initialize_model_variables()
         else:
-            # If model exists and no_refit is True, just get byte_size
             _, _, byte_size = determine_precision(
                 self.inference_precision, self.device_
             )
             rng = None
 
-        if not self.fit_mode == "batched":
+        if self.fit_mode != "batched":
             raise ValueError(
                 "The fit_from_preprocessed function"
                 " is only supported in the batched fit_mode."
@@ -638,6 +630,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         Returns:
             self
         """
+        ensemble_configs: list[RegressorEnsembleConfig]
         if not hasattr(self, "model_") or not self.differentiable_input:
             byte_size, rng = self._initialize_model_variables()
             ensemble_configs, X, y, self.bardist_ = (
@@ -651,17 +644,15 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
 
         if self.fit_mode == "batched":
             raise ValueError(
-                "The fit() function is currently not supported in the batched fit_mode."
+                "The fit() function is not supported in 'batched' fit_mode."
             )
 
         assert len(ensemble_configs) == self.n_estimators
 
         self.is_constant_target_ = np.unique(y).size == 1
-        self.constant_value_ = None
+        self.constant_value_ = y[0] if self.is_constant_target_ else None
 
         if self.is_constant_target_:
-            self.constant_value_ = y[0]
-            # Create minimally valid borders around constant value
             self.bardist_ = FullSupportBarDistribution(
                 borders=torch.tensor(
                     [self.constant_value_ - 1e-5, self.constant_value_ + 1e-5]
@@ -670,9 +661,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
 
             return self
 
-        # Standardize y
-        mean = np.mean(y)
-        std = np.std(y)
+        mean, std = np.mean(y), np.std(y)
         self.y_train_std_ = std.item() + 1e-20
         self.y_train_mean_ = mean.item()
         y = (y - self.y_train_mean_) / self.y_train_std_
@@ -705,7 +694,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         self,
         X: XType,
         *,
-        output_mode: Literal["mean", "median", "mode"] = "mean",
+        output_type: Literal["mean", "median", "mode"] = "mean",
         quantiles: list[float] | None = None,
     ) -> np.ndarray: ...
 
@@ -714,7 +703,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         self,
         X: XType,
         *,
-        output_mode: Literal["quantiles"],
+        output_type: Literal["quantiles"],
         quantiles: list[float] | None = None,
     ) -> list[np.ndarray]: ...
 
@@ -723,7 +712,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         self,
         X: XType,
         *,
-        output_mode: Literal["main"],
+        output_type: Literal["main"],
         quantiles: list[float] | None = None,
     ) -> MainOutputDict: ...
 
@@ -732,7 +721,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         self,
         X: XType,
         *,
-        output_mode: Literal["full"],
+        output_type: Literal["full"],
         quantiles: list[float] | None = None,
     ) -> FullOutputDict: ...
 
@@ -742,7 +731,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         X: XType,
         *,
         # TODO: support "ei", "pi"
-        output_mode: OutputModeType = "mean",
+        output_type: OutputType = "mean",
         quantiles: list[float] | None = None,
     ) -> RegressionResultType:
         """Runs the forward() method and then transform the logits
@@ -750,7 +739,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
 
         Args:
             X: The input data.
-            output_mode:
+            output_type:
                 Determines the type of output to return.
 
                 - If `"mean"`, we return the mean over the predicted distribution.
@@ -771,7 +760,8 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
                 the input order.
 
         Returns:
-            The predicted target variable or a list of predictions per quantile.
+            The prediction, which can be a numpy array, a list of arrays (for
+            quantiles), or a dictionary with detailed outputs.
         """
         check_is_fitted(self)
 
@@ -786,11 +776,11 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             assert all(
                 (0 <= q <= 1) and (isinstance(q, float)) for q in quantiles
             ), "All quantiles must be between 0 and 1 and floats."
-        if output_mode not in self._USABLE_OUTPUT_MODES:
-            raise ValueError(f"Invalid output type: {output_mode}")
+        if output_type not in _USABLE_OUTPUT_TYPES:
+            raise ValueError(f"Invalid output type: {output_type}")
 
         if hasattr(self, "is_constant_target_") and self.is_constant_target_:
-            return self._handle_constant_target(X.shape[0], output_mode, quantiles)
+            return self._handle_constant_target(X.shape[0], output_type, quantiles)
 
         X = _fix_dtypes(X, cat_indices=self.inferred_categorical_indices_)
         X = _process_text_na_dataframe(X, ord_encoder=self.preprocessor_)  # type: ignore
@@ -823,24 +813,24 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             logits = logits.float()
         logits = logits.cpu()
 
-        # Determine and return intended output mode
+        # Determine and return intended output type
         logit_to_output = partial(
             _logits_to_output,
             logits=logits,
             criterion=self.normalized_bardist_,
             quantiles=quantiles,
         )
-        if output_mode in ["full", "main"]:
+        if output_type in ["full", "main"]:
             # Create a dictionary of outputs with proper typing via TypedDict
             # Get individual outputs with proper typing
-            mean_out = typing.cast("np.ndarray", logit_to_output(output_mode="mean"))
+            mean_out = typing.cast("np.ndarray", logit_to_output(output_type="mean"))
             median_out = typing.cast(
-                "np.ndarray", logit_to_output(output_mode="median")
+                "np.ndarray", logit_to_output(output_type="median")
             )
-            mode_out = typing.cast("np.ndarray", logit_to_output(output_mode="mode"))
+            mode_out = typing.cast("np.ndarray", logit_to_output(output_type="mode"))
             quantiles_out = typing.cast(
                 "list[np.ndarray]",
-                logit_to_output(output_mode="quantiles"),
+                logit_to_output(output_type="quantiles"),
             )
 
             # Create our typed dictionary
@@ -851,7 +841,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
                 quantiles=quantiles_out,
             )
 
-            if output_mode == "full":
+            if output_type == "full":
                 # Return full output with criterion and logits
                 return FullOutputDict(
                     **main_outputs,
@@ -861,7 +851,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
 
             return main_outputs
 
-        return logit_to_output(output_mode=output_mode)
+        return logit_to_output(output_type=output_type)
 
     def forward(
         self,
@@ -997,78 +987,60 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         return averaged_logits, outputs, borders
 
     def _handle_constant_target(
-        self, n_samples: int, output_mode: OutputModeType, quantiles: list[float]
+        self, n_samples: int, output_type: OutputType, quantiles: list[float]
     ) -> RegressionResultType:
+        """Handles prediction when the training target `y` was a constant value."""
         constant_prediction = np.full(n_samples, self.constant_value_)
-        result: RegressionResultType
-        if output_mode == "quantiles":
-            result = [constant_prediction for _ in quantiles]
-        elif output_mode in ["full", "main"]:
-            main_outputs = MainOutputDict(
-                mean=constant_prediction,
-                median=constant_prediction,
-                mode=constant_prediction,
-                quantiles=[constant_prediction for _ in quantiles],
+        if output_type in _OUTPUT_TYPES_BASIC:
+            return constant_prediction
+        if output_type == "quantiles":
+            return [np.copy(constant_prediction) for _ in quantiles]
+
+        # Handle "main" and "full"
+        main_outputs = MainOutputDict(
+            mean=constant_prediction,
+            median=np.copy(constant_prediction),
+            mode=np.copy(constant_prediction),
+            quantiles=[np.copy(constant_prediction) for _ in quantiles],
+        )
+        if output_type == "full":
+            return FullOutputDict(
+                **main_outputs,
+                criterion=self.bardist_,
+                logits=torch.zeros((n_samples, 1)),
             )
-            if output_mode == "full":
-                result = FullOutputDict(
-                    **main_outputs,
-                    criterion=self.bardist_,
-                    logits=torch.zeros((n_samples, 1)),
-                )
-            else:
-                result = main_outputs
-        else:
-            result = constant_prediction
-        return result
+        return main_outputs
 
     def get_embeddings(
         self,
         X: XType,
         data_source: Literal["train", "test"] = "test",
     ) -> np.ndarray:
-        """Get the embeddings for the input data `X`.
-
-        Parameters:
-            X (XType): The input data.
-            data_source str: Extract either the train or test embeddings
-        Returns:
-            np.ndarray: The computed embeddings for each fitted estimator.
-        """
+        """Gets the embeddings for the input data `X`."""
         return _get_embeddings(self, X, data_source)
 
 
 def _logits_to_output(
     *,
-    output_mode: str,
+    output_type: str,
     logits: torch.Tensor,
     criterion: FullSupportBarDistribution,
     quantiles: list[float],
 ) -> np.ndarray | list[np.ndarray]:
-    """Convert the logits to the specified output mode.
-
-    Args:
-        output_mode: The output mode to convert the logits to.
-        logits: The logits to convert.
-        criterion: The criterion to use for the conversion.
-        quantiles: The quantiles to use for the conversion.
-
-    Returns:
-        The converted logits or list of converted logits.
-    """
-    if output_mode == "quantiles":
+    """Converts raw model logits to the desired prediction format."""
+    if output_type == "quantiles":
         return [criterion.icdf(logits, q).cpu().detach().numpy() for q in quantiles]
 
     # TODO: support
     #   "pi": criterion.pi(logits, np.max(self.y)),
     #   "ei": criterion.ei(logits),
-    if output_mode == "mean":
+    if output_type == "mean":
         output = criterion.mean(logits)
-    elif output_mode == "median":
+    elif output_type == "median":
         output = criterion.median(logits)
-    elif output_mode == "mode":
+    elif output_type == "mode":
         output = criterion.mode(logits)
     else:
-        raise ValueError(f"Invalid output mode: {output_mode}")
+        raise ValueError(f"Invalid output type: {output_type}")
 
-    return output.cpu().detach().numpy()  # type: ignore
+    return output.cpu().detach().numpy()
