@@ -630,6 +630,8 @@ class NoneTransformer(FunctionTransformer):
 class ReshapeFeatureDistributionsStep(FeaturePreprocessingTransformerStep):
     """Reshape the feature distributions using different transformations."""
 
+    APPEND_TO_ORIGINAL_THRESHOLD = 500
+
     @staticmethod
     def get_column_types(X: np.ndarray) -> list[str]:
         """Returns a list of column types for the given data, that indicate how
@@ -942,8 +944,9 @@ class ReshapeFeatureDistributionsStep(FeaturePreprocessingTransformerStep):
 
         numerical_ix = [i for i in range(n_features) if i not in categorical_features]
 
+        append_decision = n_features < self.APPEND_TO_ORIGINAL_THRESHOLD
         self.append_to_original = (
-            n_features < 500
+            append_decision
             if self.append_to_original == "auto"
             else self.append_to_original
         )
