@@ -104,7 +104,7 @@ class FullOutputDict(MainOutputDict):
 RegressionResultType = Union[
     np.ndarray, list[np.ndarray], MainOutputDict, FullOutputDict
 ]
-OutputTypeType = Literal[
+OutputModeType = Literal[
     "mean",
     "median",
     "mode",
@@ -163,16 +163,17 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
     preprocessor_: ColumnTransformer
     """The column transformer used to preprocess the input data to be numeric."""
 
-    # TODO: consider moving the following to constants.py
-    _OUTPUT_TYPES_BASIC = ("mean", "median", "mode")
+    # TODO: consider moving the following to constants.py and merging with the
+    #   Output types defined above
+    _OUTPUT_MODES_BASIC = ("mean", "median", "mode")
     """The basic output types supported by the model."""
-    _OUTPUT_TYPES_QUANTILES = ("quantiles",)
+    _OUTPUT_MODES_QUANTILES = ("quantiles",)
     """The quantiles output type supported by the model."""
-    _OUTPUT_TYPES = _OUTPUT_TYPES_BASIC + _OUTPUT_TYPES_QUANTILES
+    _OUTPUT_MODES = _OUTPUT_MODES_BASIC + _OUTPUT_MODES_QUANTILES
     """The output types supported by the model for the "main" output type."""
-    _OUTPUT_TYPES_COMPOSITE = ("full", "main")
+    _OUTPUT_MODES_COMPOSITE = ("full", "main")
     """The composite output types supported by the model."""
-    _USABLE_OUTPUT_TYPES = _OUTPUT_TYPES + _OUTPUT_TYPES_COMPOSITE
+    _USABLE_OUTPUT_MODES = _OUTPUT_MODES + _OUTPUT_MODES_COMPOSITE
     """The output types supported by the model."""
 
     def __init__(  # noqa: PLR0913
@@ -741,9 +742,9 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         X: XType,
         *,
         # TODO: support "ei", "pi"
-        output_type: OutputTypeType = "mean",
+        output_type: OutputModeType = "mean",
         quantiles: list[float] | None = None,
-    ) -> np.ndarray | list[np.ndarray] | MainOutputDict | FullOutputDict:
+    ) -> RegressionResultType:
         """Runs the forward() method and then transform the logits
         from the binning space in order to predict target variable.
 
@@ -785,7 +786,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
             assert all(
                 (0 <= q <= 1) and (isinstance(q, float)) for q in quantiles
             ), "All quantiles must be between 0 and 1 and floats."
-        if output_type not in self._USABLE_OUTPUT_TYPES:
+        if output_type not in self._USABLE_OUTPUT_MODES:
             raise ValueError(f"Invalid output type: {output_type}")
 
         if hasattr(self, "is_constant_target_") and self.is_constant_target_:
@@ -993,7 +994,7 @@ class TabPFNRegressor(RegressorMixin, BaseEstimator):
         return averaged_logits, outputs, borders
 
     def _handle_constant_target(
-        self, n_samples: int, output_type: OutputTypeType, quantiles: list[float]
+        self, n_samples: int, output_type: OutputModeType, quantiles: list[float]
     ) -> RegressionResultType:
         constant_prediction = np.full(n_samples, self.constant_value_)
         result: RegressionResultType
