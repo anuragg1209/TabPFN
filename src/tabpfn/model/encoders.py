@@ -241,44 +241,6 @@ class SequentialEncoder(nn.Sequential, InputEncoder):
         return input[self.output_key] if self.output_key is not None else input
 
 
-class LinearInputEncoder(nn.Module):
-    """A simple linear input encoder."""
-
-    def __init__(
-        self,
-        num_features: int,
-        emsize: int,
-        replace_nan_by_zero: bool = False,
-        bias: bool = True,
-    ):
-        """Initialize the LinearInputEncoder.
-
-        Args:
-            num_features: The number of input features.
-            emsize: The embedding size, i.e. the number of output features.
-            replace_nan_by_zero: Whether to replace NaN values in the input by zero.
-            bias: Whether to use a bias term in the linear layer.
-        """
-        super().__init__()
-        self.layer = nn.Linear(num_features, emsize, bias=bias)
-        self.replace_nan_by_zero = replace_nan_by_zero
-
-    def forward(self, *x: torch.Tensor, **kwargs: Any) -> tuple[torch.Tensor]:
-        """Apply the linear transformation to the input.
-
-        Args:
-            *x: The input tensors to concatenate and transform.
-            **kwargs: Unused keyword arguments.
-
-        Returns:
-            A tuple containing the transformed tensor.
-        """
-        x = torch.cat(x, dim=-1)  # type: ignore
-        if self.replace_nan_by_zero:
-            x = torch.nan_to_num(x, nan=0.0)  # type: ignore
-        return (self.layer(x),)
-
-
 class SeqEncStep(nn.Module):
     """Abstract base class for sequential encoder steps.
 
@@ -385,8 +347,12 @@ class SeqEncStep(nn.Module):
         else:
             assert not cache_trainset_representation
             out = self._forward(*args, **kwargs)
+            # TODO: I think nothing is using _forward now
 
-        assert isinstance(out, tuple)
+        assert isinstance(
+            out,
+            tuple,
+        ), f"out is not a tuple: {out}, type: {type(out)}, class: {self.__class__.__name__}"
         assert len(out) == len(self.out_keys)
         state.update({out_key: out[i] for i, out_key in enumerate(self.out_keys)})
         return state
@@ -434,7 +400,7 @@ class LinearInputEncoderStep(SeqEncStep):
         """
         x = torch.cat(x, dim=-1)
         if self.replace_nan_by_zero:
-            x = torch.nan_to_num(x, nan=0.0)
+            x = torch.nan_to_num(x, nan=0.0)  # type: ignore
         return (self.layer(x),)
 
 
@@ -471,7 +437,11 @@ class NanHandlingEncoderStep(SeqEncStep):
             single_eval_pos: The position to use for single evaluation.
             **kwargs: Additional keyword arguments (unused).
         """
-        self.feature_means_ = torch_nanmean(x[:single_eval_pos], axis=0)
+        self.feature_means_ = torch_nanmean(
+            x[:single_eval_pos],
+            axis=0,
+            include_inf=True,
+        )
 
     def _transform(
         self,
@@ -502,7 +472,6 @@ class NanHandlingEncoderStep(SeqEncStep):
         # replace nans with the mean of the corresponding feature
         x = x.clone()  # clone to avoid inplace operations
         x[nan_mask] = self.feature_means_.unsqueeze(0).expand_as(x)[nan_mask]
-
         return x, nans_indicator
 
 
@@ -529,7 +498,7 @@ class RemoveEmptyFeaturesEncoderStep(SeqEncStep):
             x: The input tensor.
             **kwargs: Additional keyword arguments (unused).
         """
-        # self.sel = (x[1:] == x[0]).sum(0) != (x.shape[0] - 1)
+        self.sel = (x[1:] == x[0]).sum(0) != (x.shape[0] - 1)
 
     def _transform(self, x: torch.Tensor, **kwargs: Any) -> tuple[torch.Tensor]:
         """Remove empty features from the input tensor.
@@ -541,8 +510,7 @@ class RemoveEmptyFeaturesEncoderStep(SeqEncStep):
         Returns:
             A tuple containing the transformed tensor with empty features removed.
         """
-        # return (select_features(x, self.sel),)
-        return (x,)
+        return (select_features(x, self.sel),)
 
 
 class RemoveDuplicateFeaturesEncoderStep(SeqEncStep):
@@ -647,12 +615,14 @@ class VariableNumFeaturesEncoderStep(SeqEncStep):
             A tuple containing the transformed tensor of shape (seq_len, batch_size, num_features).
         """
         if x.shape[2] == 0:
-            return torch.zeros(
-                x.shape[0],
-                x.shape[1],
-                self.num_features,
-                device=x.device,
-                dtype=x.dtype,
+            return (
+                torch.zeros(
+                    x.shape[0],
+                    x.shape[1],
+                    self.num_features,
+                    device=x.device,
+                    dtype=x.dtype,
+                ),
             )
         if self.normalize_by_used_features:
             if self.normalize_by_sqrt:
@@ -796,7 +766,6 @@ class InputNormalizationEncoderStep(SeqEncStep):
                 mean=self.mean_for_normalization,
                 std=self.std_for_normalization,
             )
-
         return (x,)
 
 
