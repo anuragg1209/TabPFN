@@ -147,7 +147,7 @@ class PreprocessorConfig:
         "ordinal_shuffled",
         "ordinal_very_common_categories_shuffled",
     ] = "none"
-    append_original: bool | Literal["auto"] = "auto"
+    append_original: bool | Literal["auto"] = False
     subsample_features: float = -1
     global_transformer_name: str | None = None
     differentiable: bool = False
