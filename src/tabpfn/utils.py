@@ -872,22 +872,18 @@ def split_large_data(
 
     if not equal_split_size:
         MIN_BATCH_SIZE = 2
-        if tot_size <= max_data_size:
-            return [largeX], [largey]
-        num_chunks = ((tot_size - 1) // max_data_size) + 1
-        chunk_size = max_data_size
-        remainder = tot_size % max_data_size
 
-        offset = 0
         xlst, ylst = [], []
-        for _b in range(num_chunks):
-            xlst.append(largeX[offset : offset + chunk_size])
-            ylst.append(largey[offset : offset + chunk_size])
-            offset += chunk_size
+        offset = 0
+        while offset + max_data_size <= tot_size:
+            xlst.append(largeX[offset : offset + max_data_size])
+            ylst.append(largey[offset : offset + max_data_size])
+            offset += max_data_size
 
-        if remainder >= MIN_BATCH_SIZE:
-            xlst.append(largeX[offset : offset + remainder])
-            ylst.append(largey[offset : offset + remainder])
+        if tot_size - offset >= MIN_BATCH_SIZE:
+            xlst.append(largeX[offset:])
+            ylst.append(largey[offset:])
+
         return xlst, ylst
     num_chunks = ((tot_size - 1) // max_data_size) + 1
     basechunk_size = tot_size // num_chunks
