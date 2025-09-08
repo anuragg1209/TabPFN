@@ -405,6 +405,8 @@ class TabPFNClassifier(ClassifierMixin, BaseEstimator):
         y_raw: YType | list[YType],
         split_fn: Callable,
         max_data_size: None | int = 10000,
+        *,
+        equal_split_size: bool = True,
     ) -> DatasetCollectionWithPreprocessing:
         """Transforms raw input data into a collection of datasets,
         with varying preprocessings.
@@ -423,6 +425,11 @@ class TabPFNClassifier(ClassifierMixin, BaseEstimator):
             split_fn: A function to dissect a dataset into train and test partition.
             max_data_size: Maximum allowed number of samples in one dataset.
             If None, datasets are not splitted.
+            equal_split_size: If True, splits data into equally sized chunks under
+            max_data_size.
+            If False, splits into chunks of size `max_data_size`, with
+            the last chunk having the remainder samples but is dropped if its
+            size is less than 2.
         """
         return get_preprocessed_datasets_helper(
             self,
@@ -431,6 +438,7 @@ class TabPFNClassifier(ClassifierMixin, BaseEstimator):
             split_fn,
             max_data_size,
             model_type="classifier",
+            equal_split_size=equal_split_size,
         )
 
     def _initialize_model_variables(self) -> tuple[int, np.random.Generator]:

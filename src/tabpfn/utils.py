@@ -844,7 +844,11 @@ def get_total_memory_windows() -> float:
 
 
 def split_large_data(
-    largeX: XType, largey: YType, max_data_size: int
+    largeX: XType,
+    largey: YType,
+    max_data_size: int,
+    *,
+    equal_split_size: bool,
 ) -> tuple[list[XType], list[YType]]:
     """Split a large dataset into chunks along the first dimension.
 
@@ -854,12 +858,37 @@ def split_large_data(
         max_data_size: int that indicates max size of a chunks.
             We chose the minimum number of chunks that keeps each chunk under
             max_data_size.
+        equal_split_size: If True, splits data into equally sized chunks under
+            max_data_size.
+            If False, splits into chunks of size `max_data_size`, with
+            the last chunk having the remainder samples but is dropped if its
+            size is less than 2.
     """
     tot_size = len(largeX)
     if max_data_size <= 0:
         raise ValueError("max_data_size must be positive")
     if tot_size == 0:
         return [], []
+
+    if not equal_split_size:
+        MIN_BATCH_SIZE = 2
+        if tot_size <= max_data_size:
+            return [largeX], [largey]
+        num_chunks = ((tot_size - 1) // max_data_size) + 1
+        chunk_size = max_data_size
+        remainder = tot_size % max_data_size
+
+        offset = 0
+        xlst, ylst = [], []
+        for _b in range(num_chunks):
+            xlst.append(largeX[offset : offset + chunk_size])
+            ylst.append(largey[offset : offset + chunk_size])
+            offset += chunk_size
+
+        if remainder >= MIN_BATCH_SIZE:
+            xlst.append(largeX[offset : offset + remainder])
+            ylst.append(largey[offset : offset + remainder])
+        return xlst, ylst
     num_chunks = ((tot_size - 1) // max_data_size) + 1
     basechunk_size = tot_size // num_chunks
     remainder = tot_size % num_chunks
